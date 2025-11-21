@@ -3,15 +3,16 @@ import React, { useState, useEffect } from 'react';
 interface WheelProps {
   candidates: { name: string; id: string }[];
   onSpinComplete: (winnerId: string) => void;
+  canSpin?: boolean;
 }
 
-const WheelOfMisfortune: React.FC<WheelProps> = ({ candidates, onSpinComplete }) => {
+const WheelOfMisfortune: React.FC<WheelProps> = ({ candidates, onSpinComplete, canSpin = true }) => {
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [winner, setWinner] = useState<string | null>(null);
 
   const spin = () => {
-    if (spinning || candidates.length === 0) return;
+    if (spinning || candidates.length === 0 || !canSpin) return;
 
     setSpinning(true);
     setWinner(null);
@@ -86,10 +87,10 @@ const WheelOfMisfortune: React.FC<WheelProps> = ({ candidates, onSpinComplete })
       ) : (
         <button 
           onClick={spin}
-          disabled={spinning}
+          disabled={spinning || !canSpin}
           className="bg-white text-black font-bold py-3 px-8 rounded-full shadow-lg active:scale-95 disabled:opacity-50"
         >
-          {spinning ? "PRAYING..." : "SPIN FOR SHAME"}
+          {canSpin ? (spinning ? "PRAYING..." : "SPIN FOR SHAME") : "Host will spin"}
         </button>
       )}
     </div>

@@ -24,6 +24,7 @@ const GameLobby: React.FC = () => {
   const [selectedTarget, setSelectedTarget] = useState<Player | null>(null);
   const [tieBreakerCandidates, setTieBreakerCandidates] = useState<{name: string, id: string}[]>([]);
   const [roundEndedEarly, setRoundEndedEarly] = useState(false);
+  const isHost = currentPlayer?.id === currentSession?.host_id;
 
   // Real-time votes listener
   useEffect(() => {
@@ -108,16 +109,20 @@ const GameLobby: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentSession?.status === SessionStatus.FINISHED) {
-      const results = getResults(roundVotes);
+    if (currentSession?.status === SessionStatus.ENDED) {
+      const results = getResults(sessionVotes.length ? sessionVotes : roundVotes);
       if (results.length >= 2 && results[0].votes > 0 && results[0].votes === results[1].votes) {
-        // Identify all tied players for first place
+        // Identify all tied players for first place (session total)
         const maxVotes = results[0].votes;
         const ties = results.filter(r => r.votes === maxVotes);
         setTieBreakerCandidates(ties);
+      } else {
+        setTieBreakerCandidates([]);
       }
+    } else {
+      setTieBreakerCandidates([]);
     }
-  }, [currentSession?.status, roundVotes]);
+  }, [currentSession?.status, sessionVotes, roundVotes]);
 
 
   const handleVote = (reason: string) => {
@@ -128,6 +133,7 @@ const GameLobby: React.FC = () => {
   };
 
   const roundResults = getResults(roundVotes);
+  const overallResults = getResults(sessionVotes.length ? sessionVotes : roundVotes);
 
   if (!currentSession) return <div className="p-10 text-center">Loading Session...</div>;
 
@@ -207,30 +213,11 @@ const GameLobby: React.FC = () => {
               ))}
             </div>
           ) : (
-             <div className="flex flex-col space-y-4">
-                <div className="text-center">
-                  <div className="text-5xl mb-2">🗳️</div>
-                  <h3 className="text-2xl font-bold mb-1">Vote Cast!</h3>
-                  <p className="text-slate-400">Live leaderboard while the clock runs down.</p>
-                  <p className="text-sm text-slate-500 mt-1">{roundVotes.length}/{players.length} votes locked in</p>
-                </div>
-                <div className="bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-700 h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={roundResults} layout="vertical" margin={{ left: 20, right: 20 }}>
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" width={80} tick={{fill: '#fff'}} />
-                      <Tooltip 
-                        cursor={{fill: 'transparent'}}
-                        contentStyle={{backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff'}}
-                      />
-                      <Bar dataKey="votes" radius={[0, 4, 4, 0]}>
-                        {roundResults.map((entry, index) => (
-                          <Cell key={`cell-round-${entry.id}`} fill={index === 0 ? '#ef4444' : '#475569'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+             <div className="flex flex-col space-y-2 items-center justify-center text-center h-full">
+                <div className="text-5xl mb-2">🗳️</div>
+                <h3 className="text-2xl font-bold mb-1">Vote Cast!</h3>
+                <p className="text-slate-400">Waiting for everyone to finish or the clock to hit zero.</p>
+                <p className="text-sm text-slate-500 mt-1">{roundVotes.length}/{players.length} votes locked in</p>
              </div>
           )}
         </div>
@@ -268,84 +255,71 @@ const GameLobby: React.FC = () => {
 
   // -- VIEW: RESULTS --
   if (currentSession.status === SessionStatus.FINISHED) {
-    const results = roundResults;
-    const totalVotes = roundVotes.length;
+    const results = overallResults;
+    const totalVotes = overallResults.reduce((sum, r) => sum + r.votes, 0);
     
     return (
       <div className="min-h-screen p-4 flex flex-col max-w-md mx-auto">
         <h1 className="text-3xl font-black text-center mb-6 text-white uppercase italic">
           Hall of <span className="text-ea-red">Shame</span>
         </h1>
-        <p className="text-center text-slate-400 text-sm mb-2">Round votes recorded: {totalVotes}</p>
+        <p className="text-center text-slate-400 text-sm mb-2">Session votes recorded: {totalVotes}</p>
 
-        {tieBreakerCandidates.length > 0 ? (
-           <WheelOfMisfortune 
-              candidates={tieBreakerCandidates} 
-              onSpinComplete={(winnerId) => {
-                 // Just visual for now, or could trigger a DB update to officially mark the loser
-                 setTieBreakerCandidates([]); 
-                 // Force UI update locally to show winner
-              }} 
-           />
-        ) : (
-          <>
-            <div className="bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-700 mb-6 h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={results} layout="vertical" margin={{ left: 20, right: 20 }}>
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={80} tick={{fill: '#fff'}} />
-                  <Tooltip 
-                    cursor={{fill: 'transparent'}}
-                    contentStyle={{backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff'}}
-                  />
-                  <Bar dataKey="votes" radius={[0, 4, 4, 0]}>
-                    {results.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? '#ef4444' : '#475569'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+        <div className="bg-slate-800 p-4 rounded-2xl shadow-lg border border-slate-700 mb-6 h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={results} layout="vertical" margin={{ left: 20, right: 20 }}>
+              <XAxis type="number" hide />
+              <YAxis dataKey="name" type="category" width={80} tick={{fill: '#fff'}} />
+              <Tooltip 
+                cursor={{fill: 'transparent'}}
+                contentStyle={{backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff'}}
+              />
+              <Bar dataKey="votes" radius={[0, 4, 4, 0]}>
+                {results.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={index === 0 ? '#ef4444' : '#475569'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
-            <div className="space-y-4">
-              <h3 className="font-bold text-slate-400 uppercase text-sm">Shame Stats</h3>
-              {results.map((r, idx) => {
-                 if (r.votes === 0) return null;
-                 // Find top reason
-                 const myVotes = roundVotes.filter(v => v.target_id === r.id);
-                 const reasons: Record<string, number> = {};
-                 myVotes.forEach(v => reasons[v.reason] = (reasons[v.reason] || 0) + 1);
-                 const topReason = Object.entries(reasons).sort((a,b) => b[1] - a[1])[0]?.[0];
+        <div className="space-y-4">
+          <h3 className="font-bold text-slate-400 uppercase text-sm">Shame Stats</h3>
+          {results.map((r, idx) => {
+             if (r.votes === 0) return null;
+             // Find top reason
+             const myVotes = sessionVotes.filter(v => v.target_id === r.id);
+             const reasons: Record<string, number> = {};
+             myVotes.forEach(v => reasons[v.reason] = (reasons[v.reason] || 0) + 1);
+             const topReason = Object.entries(reasons).sort((a,b) => b[1] - a[1])[0]?.[0];
 
-                 return (
-                   <div key={r.id} className={`p-4 rounded-xl flex justify-between items-center ${idx === 0 ? 'bg-red-900/20 border border-red-500/50' : 'bg-slate-800'}`}>
-                     <div>
-                       <div className="font-bold text-lg">{r.name}</div>
-                       <div className="text-xs text-slate-400">{topReason || "Existing"}</div>
-                     </div>
-                     <div className="text-2xl font-black text-slate-200">{r.votes}</div>
-                   </div>
-                 )
-              })}
-            </div>
+             return (
+               <div key={r.id} className={`p-4 rounded-xl flex justify-between items-center ${idx === 0 ? 'bg-red-900/20 border border-red-500/50' : 'bg-slate-800'}`}>
+                 <div>
+                   <div className="font-bold text-lg">{r.name}</div>
+                   <div className="text-xs text-slate-400">{topReason || "Existing"}</div>
+                 </div>
+                 <div className="text-2xl font-black text-slate-200">{r.votes}</div>
+               </div>
+             )
+          })}
+        </div>
 
-            {currentPlayer?.id === currentSession.host_id && (
-              <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button 
-                  onClick={startVoting}
-                  className="w-full bg-white text-black font-bold py-3 rounded-xl shadow-lg"
-                >
-                  Another Round
-                </button>
-                <button 
-                  onClick={endSession}
-                  className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg"
-                >
-                  End Session
-                </button>
-              </div>
-            )}
-          </>
+        {currentPlayer?.id === currentSession.host_id && (
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button 
+              onClick={startVoting}
+              className="w-full bg-white text-black font-bold py-3 rounded-xl shadow-lg"
+            >
+              Another Round
+            </button>
+            <button 
+              onClick={endSession}
+              className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg"
+            >
+              End Session
+            </button>
+          </div>
         )}
       </div>
     );
@@ -398,7 +372,8 @@ const GameLobby: React.FC = () => {
             candidates={overallLosers} 
             onSpinComplete={() => {
               // purely for UI feedback
-            }} 
+            }}
+            canSpin={!!isHost}
           />
         )}
       </div>
